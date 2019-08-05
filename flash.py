@@ -316,7 +316,10 @@ def eraseAll(pybObj, verbose):
 
 def main():
 
-    DEFAULT_TERMINAL="/dev/ttyACM0"
+    if sys.platform.startswith("win"):
+        DEFAULT_TERMINAL="COM3"
+    else:
+        DEFAULT_TERMINAL="/dev/ttyACM0"
     APP_VERSION = "0.0.1"
 
 
@@ -349,7 +352,7 @@ def main():
         print("Path '{0}' not found.".format(args.path))
         errors = True
         
-    if not os.path.exists(args.device):
+    if not sys.platform.startswith("win") and not os.path.exists(args.device):
         print("Device '{0}' not found.".format(args.device))
         errors = True
     
@@ -368,7 +371,7 @@ def main():
             elif args.noMain:
                 clearMain(pyb)
             elif args.erase:
-                eraseAll(pyb, args.verbose)                
+                eraseAll(pyb, args.verbose)
             elif args.main:
                 setMain(pyb, args.main)
         finally:
