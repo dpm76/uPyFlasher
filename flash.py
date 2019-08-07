@@ -6,6 +6,7 @@ import os
 import sys
 import argparse
 
+APP_DIR_NAME = "userapp"
 
 def printVerbose(message, verbose=False):
     '''
@@ -59,7 +60,7 @@ def _doClearMain(pybObj):
 
 def _initMain(pybObj):
     '''
-    Clears the main.py file but makes available the user modules on start or reset.
+    Clears the main.py file but makes the user code on start or reset still available.
     
     @param pybObj: Interface with the remote device. Must be initializated previously.
     '''
@@ -67,7 +68,7 @@ def _initMain(pybObj):
     pybObj.exec("f = open('main.py', 'w')")
     pybObj.exec("f.write('#Flashed with µPyFlasher.\\n')")
     pybObj.exec("f.write('import sys\\n')")
-    pybObj.exec("f.write('sys.path.append(\"/flash/modules\")\\n')")
+    pybObj.exec("f.write('sys.path.append(\"/flash/" + APP_DIR_NAME + "\")\\n')")
     pybObj.exec("f.close()")
 
 
@@ -85,7 +86,7 @@ def clearMain(pybObj):
     answer = input("The entry point is going to be cleared. Are you sure to proceed? (Y/n): ");
     if answer and answer.startswith("Y"):        
 
-        isFlashed = remoteEval(pybObj, "'modules' in os.listdir('/flash')")
+        isFlashed = remoteEval(pybObj, "'" + APP_DIR_NAME + "' in os.listdir('/flash')")
         if isFlashed:
             _initMain(pybObj)
         else:
@@ -112,8 +113,8 @@ def _doSetMain(pybObj, entryPoint):
     pybObj.exec("f = open('main.py', 'w')")
     pybObj.exec("f.write('#Flashed with µPyFlasher.\\n')")
     pybObj.exec("f.write('import sys\\n')")
-    pybObj.exec("f.write('sys.path.append(\"/flash/modules\")\\n')")
-    pybObj.exec("f.write('#This is the entry-point of the user modules.\\n')")
+    pybObj.exec("f.write('sys.path.append(\"/flash/" + APP_DIR_NAME + "\")\\n')")
+    pybObj.exec("f.write('#This is the entry-point of the user code.\\n')")
     pybObj.exec("f.write('import {0}\\n')".format(modulePath))
     pybObj.exec("f.write('{0}()\\n')".format(entryPoint))
     pybObj.exec("f.close()")
@@ -157,7 +158,7 @@ def createDirpath(pybObj, dirpath, verbose):
             path = parentPath + "/" + dirname
             dirExists = remoteEval(pybObj, "'{0}' in os.listdir('{1}')".format(dirname, parentPath))
             if not dirExists:
-                printVerbose("Creating directory '{0}'".format(path), verbose)
+                print("Creating directory '{0}'".format(path))
                 pybObj.exec("os.mkdir('{0}')".format(path))
             parentPath = path
     
@@ -173,7 +174,7 @@ def flashFile(pybObj, localPath, remotePath, verbose):
     @param verbose: Flag to print some information about the process.
     '''
 
-    printVerbose("{0} => {1}".format(localPath, remotePath), verbose)
+    print("{0} => {1}".format(localPath, remotePath))
     
     dirpath = os.path.dirname(remotePath)
     createDirpath(pybObj, dirpath, verbose)
@@ -188,7 +189,8 @@ def flashFile(pybObj, localPath, remotePath, verbose):
     for line in lines:
         line = line.rstrip()
         i += 1
-        printVerbose("{0} > '{1}'".format(i, line), verbose)
+        printVerbose("{0} >{1}".format(i, line), verbose)
+        line = line.replace("\'", "\\\'")
         pybObj.exec("f.write('{0}\\n')".format(line))
 
     pybObj.exec("f.close()")
@@ -209,12 +211,12 @@ def eraseDir(pybObj, remotePath, verbose):
     for itemName in itemNames:
         itemPath = remotePath + '/' + itemName
         if remotePathIsFile(pybObj, itemPath):
-            printVerbose("Deleting file '{0}'".format(itemPath), verbose)
+            print("Deleting file '{0}'".format(itemPath))
             pybObj.exec("os.remove('{0}')".format(itemPath))
         else:
             eraseDir(pybObj, itemPath, verbose)
     
-    printVerbose("Deleting directory '{0}'".format(remotePath), verbose)
+    print("Deleting directory '{0}'".format(remotePath))
     pybObj.exec("os.rmdir('{0}')".format(remotePath))
     
 
@@ -265,14 +267,14 @@ def flash(pybObj, localPath, addModules, verbose):
         if os.path.isfile(localPath):
             dirpath = os.path.dirname(localPath).split("/")[-1]
             filename = localPath.split("/")[-1]
-            remotePath = "/flash/modules/{0}".format(filename)
+            remotePath = "/flash/" + APP_DIR_NAME + "/{0}".format(filename)
             flashFile(pybObj, localPath, remotePath, verbose)
         else:
             dirname = localPath.rstrip("/").split("/")[-1]
-            remotePath = "/flash/modules" + (("/" + dirname) if dirname != "." else "")
+            remotePath = "/flash/" + APP_DIR_NAME + (("/" + dirname) if dirname != "." else "")
             flashDir(pybObj, localPath, remotePath, verbose)
 
-        print("Done.")
+        print("Done. User code is available under the '" + APP_DIR_NAME + "' directory.")
         
     else:
         print("Aborted.")
@@ -280,30 +282,30 @@ def flash(pybObj, localPath, addModules, verbose):
 
 def _doEraseAll(pybObj, verbose):
     '''
-    Erases all user modules on the remote device.
+    Erases all user code on the remote device.
     
     @param pybObj: Interface with the remote device. Must be initializated previously.
     @param verbose: Flag to print some information about the process.
     '''
 
-    existModules = remoteEval(pybObj, "'flash' in os.listdir('/') and 'modules' in os.listdir('/flash')")
+    existModules = remoteEval(pybObj, "'flash' in os.listdir('/') and '" + APP_DIR_NAME + "' in os.listdir('/flash')")
     if existModules:
-        eraseDir(pybObj, "/flash/modules", verbose)
+        eraseDir(pybObj, "/flash/" + APP_DIR_NAME, verbose)
 
 
 def eraseAll(pybObj, verbose):
     '''
     Executes the "erase" option.
     Ask the user for confirmation.
-    In case of positive confirmation, it erases all user modules on the remote device.
+    In case of positive confirmation, it erases all user code on the remote device.
     
     @param pybObj: Interface with the remote device. Must be initializated previously.
     @param verbose: Flag to print some information about the process.
     '''
 
-    existModules = remoteEval(pybObj, "'flash' in os.listdir('/') and 'modules' in os.listdir('/flash')")
+    existModules = remoteEval(pybObj, "'flash' in os.listdir('/') and '" + APP_DIR_NAME + "' in os.listdir('/flash')")
     if existModules:
-        answer = input("The user modules will be erased. Are you sure to proceed? (Y/n): ");
+        answer = input("The user code will be erased. Are you sure to proceed? (Y/n): ");
         if answer and answer.startswith("Y"):
             _doEraseAll(pybObj, verbose)
             _doClearMain(pybObj)
@@ -311,7 +313,7 @@ def eraseAll(pybObj, verbose):
         else:
             print("Aborted.")
     else:
-        print("The device has no user modules flashed. Aborting.")
+        print("The device has no user code flashed. Aborting.")
         
 
 def main():
@@ -325,8 +327,8 @@ def main():
 
     parser = argparse.ArgumentParser(prog="µPyFlasher", description="Flashes a python application into a MCU with Micropython.")
     parser.add_argument("-a", "--add", action="store_true", dest="addModules",
-                    help="Keeps already flashed modules in the MCU. Otherwise, they will be deleted before flashing.")
-    parser.add_argument("-e", "--erase", action="store_true", help="Erases all user's Python modules.")
+                    help="Keeps already flashed code in the MCU. Otherwise, they will be deleted before flashing.")
+    parser.add_argument("-e", "--erase", action="store_true", help="Erases all user's Python code.")
     parser.add_argument("-m", "--main", metavar="FUNCTION",
                     help="The passed function will be executed on start or reset, usualy the 'main' function. The Python's module notation is used, i.e. myapp.mymodule.myentrypoint. This function can not have any argument.")
     parser.add_argument("-n", "--nomain", action="store_true", dest="noMain",
