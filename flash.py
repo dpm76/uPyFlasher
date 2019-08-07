@@ -108,12 +108,11 @@ def _doSetMain(pybObj, entryPoint):
     @type entryPoint: string
     '''
 
+    print("Setting entry point at '" + entryPoint + "'")
     modulePath = entryPoint[0:entryPoint.rfind(".")]
-
-    pybObj.exec("f = open('main.py', 'w')")
-    pybObj.exec("f.write('#Flashed with µPyFlasher.\\n')")
-    pybObj.exec("f.write('import sys\\n')")
-    pybObj.exec("f.write('sys.path.append(\"/flash/" + APP_DIR_NAME + "\")\\n')")
+    
+    _initMain(pybObj)
+    pybObj.exec("f = open('main.py', 'a')")
     pybObj.exec("f.write('#This is the entry-point of the user code.\\n')")
     pybObj.exec("f.write('import {0}\\n')".format(modulePath))
     pybObj.exec("f.write('{0}()\\n')".format(entryPoint))
@@ -245,7 +244,7 @@ def flashDir(pybObj, localPath, remotePath, verbose):
             printVerbose("Item '{0}' ignored".format(itemLocalPath), verbose)
             
 
-def flash(pybObj, localPath, addModules, verbose):
+def flash(pybObj, localPath, remotePath, erase, verbose):
     '''
     Executes the flash functionality.
     Ask the user for confirmation.
@@ -253,26 +252,28 @@ def flash(pybObj, localPath, addModules, verbose):
     remote device. Already flashed contents can be preserved or erased as desired.
     
     @param pybObj: Interface with the remote device. Must be initializated previously.
+    @param remotePath: Path where the code will be copied within.
     @param localPath: Path to the source file or directory.
-    @param addModules: Flag to preserve or erase already flashed contents.
+    @param erase: Flag to preserve or erase already flashed contents.
     @param verbose: Flag to print some information about the process.
     '''
 
     answer = input("The contents of MCU will be changed. Are you sure to proceed? (Y/n): ");
     if answer and answer.startswith("Y"):
 
-        if not addModules:
+        if erase:
             _doEraseAll(pybObj, verbose)
         
+        remotePath = "/" + remotePath if remotePath != "" else ""
+        
         if os.path.isfile(localPath):
-            dirpath = os.path.dirname(localPath).split("/")[-1]
             filename = localPath.split("/")[-1]
-            remotePath = "/flash/" + APP_DIR_NAME + "/{0}".format(filename)
-            flashFile(pybObj, localPath, remotePath, verbose)
+            fullRemotePath = "/flash/" + APP_DIR_NAME + remotePath + "/{0}".format(filename)
+            flashFile(pybObj, localPath, fullRemotePath, verbose)
         else:
             dirname = localPath.rstrip("/").split("/")[-1]
-            remotePath = "/flash/" + APP_DIR_NAME + (("/" + dirname) if dirname != "." else "")
-            flashDir(pybObj, localPath, remotePath, verbose)
+            fullRemotePath = "/flash/" + APP_DIR_NAME + remotePath + (("/" + dirname) if dirname != "." else "")
+            flashDir(pybObj, localPath, fullRemotePath, verbose)
 
         print("Done. User code is available under the '" + APP_DIR_NAME + "' directory.")
         
@@ -322,12 +323,12 @@ def main():
         DEFAULT_TERMINAL="COM3"
     else:
         DEFAULT_TERMINAL="/dev/ttyACM0"
-    APP_VERSION = "0.0.1"
+    APP_VERSION = "0.0.2"
 
 
     parser = argparse.ArgumentParser(prog="µPyFlasher", description="Flashes a python application into a MCU with Micropython.")
-    parser.add_argument("-a", "--add", action="store_true", dest="addModules",
-                    help="Keeps already flashed code in the MCU. Otherwise, they will be deleted before flashing.")
+    # parser.add_argument("-a", "--add", action="store_true", dest="addmodules",
+    #               help="keeps already flashed code in the mcu. otherwise, they will be deleted before flashing.")
     parser.add_argument("-e", "--erase", action="store_true", help="Erases all user's Python code.")
     parser.add_argument("-m", "--main", metavar="FUNCTION",
                     help="The passed function will be executed on start or reset, usualy the 'main' function. The Python's module notation is used, i.e. myapp.mymodule.myentrypoint. This function can not have any argument.")
@@ -340,6 +341,8 @@ def main():
     parser.add_argument("--version", action="version", version="%(prog)s v{0}".format(APP_VERSION))
     parser.add_argument("-d", "--device", metavar="DEVICE", default=DEFAULT_TERMINAL,
                     help="(default='{0}') The serial terminal or IP address where the MCU is attached to.".format(DEFAULT_TERMINAL))
+    parser.add_argument("-p", "--remotepath", metavar="REMOTE_PATH", default="",
+                    help="The code will be copied into the given path.")
 
     args = parser.parse_args()
 
@@ -347,7 +350,7 @@ def main():
     errors = False
 
     if len(sys.argv) == 1:
-        parser.print_help()
+        print("Arguments missed.\n")
         errors = True
 
     if args.path and not os.path.exists(args.path):
@@ -364,16 +367,21 @@ def main():
         pyb.enter_raw_repl()
         try:
             pyb.exec("import os")
+            
             if args.path:
-                flash(pyb, args.path, args.addModules, args.verbose)
+                flash(pyb, args.path, args.remotepath, args.erase, args.verbose)
                 if args.main:
                     _doSetMain(pyb, args.main)
-                else:
+                elif args.noMain:
                     _initMain(pyb)
-            elif args.noMain:
-                clearMain(pyb)
+                    print("Entry point cleared.")
+                    
             elif args.erase:
                 eraseAll(pyb, args.verbose)
+            
+            elif args.noMain:
+                clearMain(pyb)
+                
             elif args.main:
                 setMain(pyb, args.main)
         finally:
