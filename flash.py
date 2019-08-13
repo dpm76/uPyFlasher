@@ -5,8 +5,13 @@ from pyboard import Pyboard
 import os
 import sys
 import argparse
+import time
 
+#The user code directory. It will be under /flash/[APP_DIR_NAME]
 APP_DIR_NAME = "userapp"
+
+#Force to flush the current file each a number of lines. It seems to prevent hanging on flashing.
+FLUSH_AFTER_LINES = 5
 
 def printVerbose(message, verbose=False):
     '''
@@ -191,7 +196,10 @@ def flashFile(pybObj, localPath, remotePath, verbose):
         printVerbose("{0} >{1}".format(i, line), verbose)
         line = line.replace("\'", "\\\'")
         pybObj.exec("f.write('{0}\\n')".format(line))
+        if i % FLUSH_AFTER_LINES == 0:
+            pybObj.exec("f.flush()")
 
+    pybObj.exec("f.flush()")
     pybObj.exec("f.close()")
 
 
