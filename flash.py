@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from pyboard import Pyboard
+from pyboard import Pyboard, PyboardError
 
 import os
 import sys
@@ -165,6 +165,10 @@ def createDirpath(pybObj, dirpath, verbose):
                 print("Creating directory '{0}'".format(path))
                 pybObj.exec("os.mkdir('{0}')".format(path))
             parentPath = path
+
+def _exec(pybObj, command):
+
+    pybObj.exec_raw_no_follow(command)
     
 
 def flashFile(pybObj, localPath, remotePath, verbose):
@@ -187,20 +191,25 @@ def flashFile(pybObj, localPath, remotePath, verbose):
     lines = f.readlines()
     f.close()
     
-    pybObj.exec("f = open('{0}', 'w')".format(remotePath))
-    
+    _exec(pybObj, "f = open('{0}', 'w')".format(remotePath))
     i = 0
-    for line in lines:
+    
+    for line in lines[i:]:
         line = line.rstrip()
         i += 1
-        printVerbose("{0} >{1}".format(i, line), verbose)
+        printVerbose("{0:04d} >{1}".format(i, line), verbose)
         line = line.replace("\'", "\\\'")
-        pybObj.exec("f.write('{0}\\n')".format(line))
+        _exec(pybObj, "f.write('{0}\\n')".format(line))
+            
         if i % FLUSH_AFTER_LINES == 0:
-            pybObj.exec("f.flush()")
+            _exec(pybObj, "f.flush()")
+            if not verbose:
+                print(".", end="", flush=True)
 
-    pybObj.exec("f.flush()")
-    pybObj.exec("f.close()")
+    _exec(pybObj, "f.flush()")
+    _exec(pybObj, "f.close()")
+    if not verbose:
+        print("|")
 
 
 def eraseDir(pybObj, remotePath, verbose):
@@ -375,6 +384,7 @@ def main():
         pyb.enter_raw_repl()
         try:
             pyb.exec("import os")
+            pyb.exec("import utime")
             
             if args.path:
                 flash(pyb, args.path, args.remotepath, args.erase, args.verbose)
