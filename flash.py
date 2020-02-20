@@ -13,6 +13,12 @@ APP_DIR_NAME = "userapp"
 #Force to flush the current file each a number of lines. It seems to prevent hanging on flashing.
 FLUSH_AFTER_LINES = 5
 
+#File types that are considered as text files, otherwise they'll be treated as binary file.
+TEXT_FILES = (".py", ".txt")
+
+#Size of the buffer for binary copy
+BINARY_BUFFER_SIZE = 64
+
 def printVerbose(message, verbose=False):
     '''
     Prints a message when verbose is required
@@ -171,9 +177,9 @@ def _exec(pybObj, command):
     pybObj.exec_raw_no_follow(command)
     
 
-def flashFile(pybObj, localPath, remotePath, verbose):
+def flashTextFile(pybObj, localPath, remotePath, verbose):
     '''
-    Copies a file to the remote device. If the destination path doesn't exist, it will be created.
+    Copies a file to the remote device in text mode. If the destination path doesn't exist, it will be created.
     
     @param pybObj: Interface with the remote device. Must be initializated previously.
     @param localPath: Path to the source file.
@@ -182,7 +188,7 @@ def flashFile(pybObj, localPath, remotePath, verbose):
     @param verbose: Flag to print some information about the process.
     '''
 
-    print("{0} => {1}".format(localPath, remotePath))
+    print("(text) {0} => {1}".format(localPath, remotePath))
     
     dirpath = os.path.dirname(remotePath)
     createDirpath(pybObj, dirpath, verbose)
@@ -210,6 +216,42 @@ def flashFile(pybObj, localPath, remotePath, verbose):
     _exec(pybObj, "f.close()")
     if not verbose:
         print("|")
+
+
+def flashBinaryFile(pybObj, localPath, remotePath, verbose):
+    '''
+    Copies a file to the remote device in binary mode. If the destination path doesn't exist, it will be created.
+    
+    @param pybObj: Interface with the remote device. Must be initializated previously.
+    @param localPath: Path to the source file.
+    @param remotePath: Path of the destination file. This path must be absolute, 
+                       that means starting with "/".
+    @param verbose: Flag to print some information about the process.
+    '''
+    
+    print("(binary) {0} => {1}".format(localPath, remotePath))
+    
+    dirpath = os.path.dirname(remotePath)
+    createDirpath(pybObj, dirpath, verbose)
+
+    with open(localPath, "rb") as f:
+        
+        _exec(pybObj, "f = open('{0}', 'wb')".format(remotePath))
+        
+        buffer = bytes(f.read(BINARY_BUFFER_SIZE))
+        while len(buffer) > 0:                   
+            _exec(pybObj, "f.write({0})".format(str(buffer)))
+            _exec(pybObj, "f.flush()")
+            buffer = bytes(f.read(BINARY_BUFFER_SIZE))
+            if not verbose:
+                print(".", end="", flush=True)
+            else:
+                print(buffer)
+        
+        _exec(pybObj, "f.close()")
+        if not verbose:
+            print("|")
+        f.close()
 
 
 def eraseDir(pybObj, remotePath, verbose):
@@ -254,7 +296,10 @@ def flashDir(pybObj, localPath, remotePath, verbose):
         itemLocalPath = "{0}/{1}".format(localPath, itemName)
         itemRemotePath = "{0}/{1}".format(remotePath, itemName)
         if os.path.isfile(itemLocalPath) and not itemName.endswith(".pyc"):
-            flashFile(pybObj, itemLocalPath, itemRemotePath, verbose)
+            if itemName.endswith(TEXT_FILES):
+                flashTextFile(pybObj, itemLocalPath, itemRemotePath, verbose)
+            else:
+                flashBinaryFile(pybObj, itemLocalPath, itemRemotePath, verbose)
         elif os.path.isdir(itemLocalPath) and itemName != "__pycache__":
             flashDir(pybObj, itemLocalPath, itemRemotePath, verbose)
         else:
@@ -286,7 +331,10 @@ def flash(pybObj, localPath, remotePath, erase, verbose):
         if os.path.isfile(localPath):
             filename = localPath.split("/")[-1]
             fullRemotePath = "/flash/" + APP_DIR_NAME + remotePath + "/{0}".format(filename)
-            flashFile(pybObj, localPath, fullRemotePath, verbose)
+            if filename.endswith(TEXT_FILES):
+                flashTextFile(pybObj, localPath, fullRemotePath, verbose)
+            else:
+                flashBinaryFile(pybObj, localPath, fullRemotePath, verbose)
         else:
             dirname = localPath.rstrip("/").split("/")[-1]
             fullRemotePath = "/flash/" + APP_DIR_NAME + remotePath + (("/" + dirname) if dirname != "." else "")
@@ -340,7 +388,7 @@ def main():
         DEFAULT_TERMINAL="COM3"
     else:
         DEFAULT_TERMINAL="/dev/ttyACM0"
-    APP_VERSION = "0.0.2"
+    APP_VERSION = "0.0.3"
 
 
     parser = argparse.ArgumentParser(prog="µPyFlasher", description="Flashes a python application into a MCU with Micropython.")
