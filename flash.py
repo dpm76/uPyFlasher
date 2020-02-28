@@ -160,6 +160,7 @@ def createDirpath(pybObj, dirpath, verbose):
     @param verbose: Flag to print some information about the process.
     '''
 
+    dirpath = dirpath.replace("\\", "/")
     dirnames = dirpath.lstrip("/flash/").split("/")
     parentPath = "/flash"
     
@@ -177,7 +178,7 @@ def _exec(pybObj, command):
     pybObj.exec_raw_no_follow(command)
     
 
-def flashTextFile(pybObj, localPath, remotePath, verbose):
+def flashTextFile(pybObj, localPath, remotePath, flushAfterLines, verbose):
     '''
     Copies a file to the remote device in text mode. If the destination path doesn't exist, it will be created.
     
@@ -185,6 +186,7 @@ def flashTextFile(pybObj, localPath, remotePath, verbose):
     @param localPath: Path to the source file.
     @param remotePath: Path of the destination file. This path must be absolute, 
                        that means starting with "/".
+    @param flushAfterLines: Flushes file after some lines.
     @param verbose: Flag to print some information about the process.
     '''
 
@@ -207,7 +209,7 @@ def flashTextFile(pybObj, localPath, remotePath, verbose):
         line = line.replace("\'", "\\\'")
         _exec(pybObj, "f.write('{0}\\n')".format(line))
             
-        if i % FLUSH_AFTER_LINES == 0:
+        if i % flushAfterLines == 0:
             _exec(pybObj, "f.flush()")
             if not verbose:
                 print(".", end="", flush=True)
@@ -278,7 +280,7 @@ def eraseDir(pybObj, remotePath, verbose):
     pybObj.exec("os.rmdir('{0}')".format(remotePath))
     
 
-def flashDir(pybObj, localPath, remotePath, verbose):
+def flashDir(pybObj, localPath, remotePath, forceBinary, flushAfterLines, verbose):
     '''
     Copies a directory on the remote device. This function is recursive and all contents, 
     files and directories within the target directory will be copied too, but files with the 
@@ -289,6 +291,8 @@ def flashDir(pybObj, localPath, remotePath, verbose):
     @param localPath: Path to the source directory.
     @param remotePath: Path of the remote directory. This path must be absolute, 
                        that means starting with "/".
+    @forceBinary: Forces files to be copied in binary mode
+    @flushAfterLines: Flushes text files after some lines. It is ignored for binary files.
     @param verbose: Flag to print some information about the process.
     '''
 
@@ -296,17 +300,17 @@ def flashDir(pybObj, localPath, remotePath, verbose):
         itemLocalPath = "{0}/{1}".format(localPath, itemName)
         itemRemotePath = "{0}/{1}".format(remotePath, itemName)
         if os.path.isfile(itemLocalPath) and not itemName.endswith(".pyc"):
-            if itemName.endswith(TEXT_FILES):
-                flashTextFile(pybObj, itemLocalPath, itemRemotePath, verbose)
+            if not forceBinary and itemName.endswith(TEXT_FILES):
+                flashTextFile(pybObj, itemLocalPath, itemRemotePath, flushAfterLines, verbose)
             else:
                 flashBinaryFile(pybObj, itemLocalPath, itemRemotePath, verbose)
         elif os.path.isdir(itemLocalPath) and itemName != "__pycache__":
-            flashDir(pybObj, itemLocalPath, itemRemotePath, verbose)
+            flashDir(pybObj, itemLocalPath, itemRemotePath, forceBinary, flushAfterLines, verbose)
         else:
             printVerbose("Item '{0}' ignored".format(itemLocalPath), verbose)
             
 
-def flash(pybObj, localPath, remotePath, erase, verbose):
+def flash(pybObj, localPath, remotePath, erase, forceBinary, flushAfterLines, verbose):
     '''
     Executes the flash functionality.
     Ask the user for confirmation.
@@ -317,6 +321,8 @@ def flash(pybObj, localPath, remotePath, erase, verbose):
     @param remotePath: Path where the code will be copied within.
     @param localPath: Path to the source file or directory.
     @param erase: Flag to preserve or erase already flashed contents.
+    @param forceBinary: Forces files to be copied in binary mode
+    @param flushAfterLines: Flushes text files after some lines. It is ignored for binary files.
     @param verbose: Flag to print some information about the process.
     '''
 
@@ -331,14 +337,14 @@ def flash(pybObj, localPath, remotePath, erase, verbose):
         if os.path.isfile(localPath):
             filename = localPath.split("/")[-1]
             fullRemotePath = "/flash/" + APP_DIR_NAME + remotePath + "/{0}".format(filename)
-            if filename.endswith(TEXT_FILES):
-                flashTextFile(pybObj, localPath, fullRemotePath, verbose)
+            if not forceBinary and filename.endswith(TEXT_FILES):
+                flashTextFile(pybObj, localPath, fullRemotePath, flushAfterLines, verbose)
             else:
                 flashBinaryFile(pybObj, localPath, fullRemotePath, verbose)
         else:
             dirname = localPath.rstrip("/").split("/")[-1]
             fullRemotePath = "/flash/" + APP_DIR_NAME + remotePath + (("/" + dirname) if dirname != "." else "")
-            flashDir(pybObj, localPath, fullRemotePath, verbose)
+            flashDir(pybObj, localPath, fullRemotePath, forceBinary, flushAfterLines, verbose)
 
         print("Done. User code is available under the '" + APP_DIR_NAME + "' directory.")
         
@@ -388,33 +394,36 @@ def main():
         DEFAULT_TERMINAL="COM3"
     else:
         DEFAULT_TERMINAL="/dev/ttyACM0"
-    APP_VERSION = "0.0.3"
+    APP_VERSION = "0.0.4"
 
 
     parser = argparse.ArgumentParser(prog="µPyFlasher", description="Flashes a python application into a MCU with Micropython.")
     # parser.add_argument("-a", "--add", action="store_true", dest="addmodules",
     #               help="keeps already flashed code in the mcu. otherwise, they will be deleted before flashing.")
+    parser.add_argument("-b", "--binary", action="store_true", dest="forceBinary", help="Forces all files to be copied in binary mode.")
+    parser.add_argument("-d", "--device", metavar="DEVICE", default=DEFAULT_TERMINAL,
+                    help="(default='{0}') The serial terminal or IP address where the MCU is attached to.".format(DEFAULT_TERMINAL))
     parser.add_argument("-e", "--erase", action="store_true", help="Erases all user's Python code.")
+    parser.add_argument("-l", "--lines", metavar="NUMBER", dest="flushAfterLines", default=FLUSH_AFTER_LINES,
+                    help="(default={0}) Flushes text files after NUMBER lines. Ignored for binary files.".format(FLUSH_AFTER_LINES))
     parser.add_argument("-m", "--main", metavar="FUNCTION",
                     help="The passed function will be executed on start or reset, usualy the 'main' function. The Python's module notation is used, i.e. myapp.mymodule.myentrypoint. This function can not have any argument.")
     parser.add_argument("-n", "--nomain", action="store_true", dest="noMain",
-                    help="Clear the entry point (main function). Therefore the device executes no action after start or reset.")
-    parser.add_argument("path", metavar="LOCAL_PATH", nargs="?",
-                    help="Application root path. All files and directories within this path will be flashed.")
+                    help="Clear the entry point (main function) but sets path. Therefore the device executes no action after start or reset.")
+    parser.add_argument("-p", "--remotepath", metavar="REMOTE_PATH", default="",
+                    help="The code will be copied into the given path.")
     parser.add_argument("-v", "--verbose", action="store_true",
                     help="Show more information about the flashing process.")
     parser.add_argument("--version", action="version", version="%(prog)s v{0}".format(APP_VERSION))
-    parser.add_argument("-d", "--device", metavar="DEVICE", default=DEFAULT_TERMINAL,
-                    help="(default='{0}') The serial terminal or IP address where the MCU is attached to.".format(DEFAULT_TERMINAL))
-    parser.add_argument("-p", "--remotepath", metavar="REMOTE_PATH", default="",
-                    help="The code will be copied into the given path.")
+    parser.add_argument("path", metavar="LOCAL_PATH", nargs="?",
+                    help="Application root path. All files and directories within this path will be flashed.")
 
     args = parser.parse_args()
 
     #check args
     errors = False
 
-    if len(sys.argv) == 1:
+    if not args.erase and not args.path and not args.noMain and not args.main:
         print("Arguments missed.\n")
         errors = True
 
@@ -435,7 +444,8 @@ def main():
             pyb.exec("import utime")
             
             if args.path:
-                flash(pyb, args.path, args.remotepath, args.erase, args.verbose)
+                flash(pyb, args.path, args.remotepath, args.erase, args.forceBinary, args.flushAfterLines, args.verbose)
+                
                 if args.main:
                     _doSetMain(pyb, args.main)
                 elif args.noMain:
