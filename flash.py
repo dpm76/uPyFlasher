@@ -394,7 +394,7 @@ def main():
         DEFAULT_TERMINAL="COM3"
     else:
         DEFAULT_TERMINAL="/dev/ttyACM0"
-    APP_VERSION = "0.0.4"
+    APP_VERSION = "0.0.5"
 
 
     parser = argparse.ArgumentParser(prog="µPyFlasher", description="Flashes a python application into a MCU with Micropython.")
@@ -404,7 +404,7 @@ def main():
     parser.add_argument("-d", "--device", metavar="DEVICE", default=DEFAULT_TERMINAL,
                     help="(default='{0}') The serial terminal or IP address where the MCU is attached to.".format(DEFAULT_TERMINAL))
     parser.add_argument("-e", "--erase", action="store_true", help="Erases all user's Python code.")
-    parser.add_argument("-l", "--lines", metavar="NUMBER", dest="flushAfterLines", default=FLUSH_AFTER_LINES,
+    parser.add_argument("-l", "--lines", metavar="NUMBER", dest="flushAfterLines", default=FLUSH_AFTER_LINES, type=int,
                     help="(default={0}) Flushes text files after NUMBER lines. Ignored for binary files.".format(FLUSH_AFTER_LINES))
     parser.add_argument("-m", "--main", metavar="FUNCTION",
                     help="The passed function will be executed on start or reset, usualy the 'main' function. The Python's module notation is used, i.e. myapp.mymodule.myentrypoint. This function can not have any argument.")
