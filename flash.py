@@ -207,10 +207,14 @@ def flashTextFile(pybObj, localPath, remotePath, flushAfterLines, verbose):
         i += 1
         printVerbose("{0:04d} >{1}".format(i, line), verbose)
         line = line.replace("\'", "\\\'")
+        line = line.replace("\"", "\\\"")
+        line = line.replace("\\r", "\\\\r")
+        line = line.replace("\\n", "\\\\n")
         _exec(pybObj, "f.write('{0}\\n')".format(line))
             
         if i % flushAfterLines == 0:
             _exec(pybObj, "f.flush()")
+            time.sleep(0.1)
             if not verbose:
                 print(".", end="", flush=True)
 
