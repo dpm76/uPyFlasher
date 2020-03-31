@@ -192,6 +192,7 @@ def flashTextFile(pybObj, localPath, remotePath, flushAfterLines, verbose):
 
     print("(text) {0} => {1}".format(localPath, remotePath))
     
+    remotePath = remotePath.replace("\\","/")
     dirpath = os.path.dirname(remotePath)
     createDirpath(pybObj, dirpath, verbose)
 
