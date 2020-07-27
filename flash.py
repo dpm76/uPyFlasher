@@ -7,6 +7,9 @@ import sys
 import argparse
 import time
 
+#Version of this script
+APP_VERSION = "0.0.6"
+
 #The user code directory. It will be under /flash/[APP_DIR_NAME]
 APP_DIR_NAME = "userapp"
 
@@ -77,9 +80,9 @@ def _initMain(pybObj):
     '''
 
     pybObj.exec("f = open('main.py', 'w')")
-    pybObj.exec("f.write('#Flashed with µPyFlasher.\\n')")
-    pybObj.exec("f.write('import sys\\n')")
-    pybObj.exec("f.write('sys.path.append(\"/flash/" + APP_DIR_NAME + "\")\\n')")
+    pybObj.exec("f.write('#Flashed with µPyFlasher v{0}.\\n')".format(APP_VERSION))
+    pybObj.exec("f.write('from sys import path\\n')")
+    pybObj.exec("f.write('path.append(\"/flash/" + APP_DIR_NAME + "\")\\n')")
     pybObj.exec("f.close()")
 
 
@@ -399,8 +402,6 @@ def main():
         DEFAULT_TERMINAL="COM3"
     else:
         DEFAULT_TERMINAL="/dev/ttyACM0"
-    APP_VERSION = "0.0.5"
-
 
     parser = argparse.ArgumentParser(prog="µPyFlasher", description="Flashes a python application into a MCU with Micropython.")
     # parser.add_argument("-a", "--add", action="store_true", dest="addmodules",
